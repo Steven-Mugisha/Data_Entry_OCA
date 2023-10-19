@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "dotenv": "^16.3.1",
+    "exceljs": "^4.3.0"
+  }
+}
