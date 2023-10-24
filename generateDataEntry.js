@@ -3,6 +3,7 @@ const fs = require('fs');
 const AdmZip = require('adm-zip');
 const ExcelJS = require('exceljs');
 const { json } = require('stream/consumers');
+const { start } = require('repl');
 require('dotenv').config();
 
 // Custom error-handling function
@@ -120,7 +121,8 @@ function generateDataEntry(path, outputFilePath) {
   const sheet2 = workbook.addWorksheet('Data Entry');
   const sheet3 = workbook.addWorksheet('Schema conformant data');
 
-  const attributesIndex = {}; 
+  const attributesIndex = {};
+  let attributeNames = null;
 
   jsonData.forEach((overlay) => {
     if (overlay.type && overlay.type.includes('/capture_base/')) {
@@ -150,7 +152,7 @@ function generateDataEntry(path, outputFilePath) {
       });
 
       // sheet 3
-      const attributeNames = Object.keys(overlay.attributes);
+      attributeNames = Object.keys(overlay.attributes)
       
       try { 
           sheet3.getRow(1).values = attributeNames;
@@ -191,8 +193,48 @@ function generateDataEntry(path, outputFilePath) {
         }
 
     }
-        
-    });
+  });
+
+  
+  let skipped = 0;
+
+  jsonData.forEach((overlay, i) => {
+    if (overlay.type && overlay.type.includes('/character_encoding/')) {
+
+      const startColumn = i + 4 - skipped;
+      const endColumn = startColumn;
+
+      try {
+
+        sheet1.getColumn(startColumn).width = 15;
+        sheet1.getCell(1, startColumn).value = 'OL: Character Encoding';
+        formatHeader2(sheet1.getCell(1, startColumn));
+
+        for (let row = 2; row <= attributeNames.length + 1; row++) {
+          sheet1.getCell(row, startColumn).value = null;
+          formatAttr2(sheet1.getCell(row, startColumn));
+        }
+
+        for (let [attrName, encoding] of Object.entries(overlay.attribute_character_encoding)) {
+
+          if (typeof encoding == 'string') {
+            console.log('attrName', attrName);
+
+            // const rowIndex = attributesIndex[attrName];
+            // console.log('rowIndex', rowIndex);
+            // if (rowIndex) {
+            //   sheet1.getCell(rowIndex, startColumn).value = encoding;
+            // }
+
+          }
+
+        }
+
+      } catch (error) {
+        throw new WorkbookError('.. Error in formatting character encoding column (header and rows) ...');
+      }
+    }
+  });
   
   return workbook;
 
