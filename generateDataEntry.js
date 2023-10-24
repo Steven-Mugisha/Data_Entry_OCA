@@ -201,39 +201,59 @@ function generateDataEntry(path, outputFilePath) {
   jsonData.forEach((overlay, i) => {
     if (overlay.type && overlay.type.includes('/character_encoding/')) {
 
-      const startColumn = i + 4 - skipped;
-      const endColumn = startColumn;
-
       try {
 
-        sheet1.getColumn(startColumn).width = 15;
-        sheet1.getCell(1, startColumn).value = 'OL: Character Encoding';
-        formatHeader2(sheet1.getCell(1, startColumn));
+        sheet1.getColumn(i + 4 - skipped).width = 15;
+        sheet1.getCell(1, i + 4 - skipped).value = 'OL: Character Encoding';
+        formatHeader2(sheet1.getCell(1, i + 4 - skipped));
 
         for (let row = 2; row <= attributeNames.length + 1; row++) {
-          sheet1.getCell(row, startColumn).value = null;
-          formatAttr2(sheet1.getCell(row, startColumn));
+          sheet1.getCell(row, i + 4 - skipped).value = null;
+          formatAttr2(sheet1.getCell(row, i + 4 - skipped));
         }
 
         for (let [attrName, encoding] of Object.entries(overlay.attribute_character_encoding)) {
 
           if (typeof encoding == 'string') {
-            console.log('attrName', attrName);
-
-            // const rowIndex = attributesIndex[attrName];
-            // console.log('rowIndex', rowIndex);
-            // if (rowIndex) {
-            //   sheet1.getCell(rowIndex, startColumn).value = encoding;
-            // }
-
-          }
-
+            const attrKeys = Object.keys(attributesIndex);
+            const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
+            const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+            if (rowIndex) {
+              sheet1.getCell(rowIndex, i + 4 - skipped).value = encoding;
+            } 
+          } 
         }
 
       } catch (error) {
         throw new WorkbookError('.. Error in formatting character encoding column (header and rows) ...');
       }
+    } else if (overlay.type && overlay.type.includes('/cardinality/')) {
+      try {
+
+        sheet1.getColumn(i + 4 - skipped).width = 15;
+        sheet1.getCell(1, i + 4 - skipped).value = 'OL: Cardinality';
+        formatHeader2(sheet1.getCell(1, i + 4 - skipped));
+
+        for (let row = 2; row <= attributeNames.length + 1; row++) {
+          sheet1.getCell(row, i + 4 - skipped).value = null;
+          formatAttr2(sheet1.getCell(row, i + 4 - skipped));
+        }
+
+        for (let [attrName, cardinality] of Object.entries(overlay.attribute_cardinality)) {
+
+          const attrKeys = Object.keys(attributesIndex);
+          const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
+          const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+          if (rowIndex) {
+            sheet1.getCell(rowIndex, i + 4 - skipped).value = cardinality;
+          } 
+        }
+
+      } catch (error) {
+        throw new WorkbookError('.. Error in formatting cardinality column (header and rows) ...');
+      }
     }
+    
   });
   
   return workbook;
