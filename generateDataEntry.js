@@ -4,6 +4,7 @@ const AdmZip = require('adm-zip');
 const ExcelJS = require('exceljs');
 const { json } = require('stream/consumers');
 const { start } = require('repl');
+const { Console } = require('console');
 require('dotenv').config();
 
 // Custom error-handling function
@@ -169,7 +170,8 @@ function generateDataEntry(path, outputFilePath) {
           const letter = String.fromCharCode(65 + i);
           
           for (let r = 1; r <= 1000; r++) {
-            const formula = `IF(ISBLANK('Data Entry'!${letter}${r + 1}), "", 'Data Entry'!${letter}${r + 1})`;
+            const formula = `IF(ISBLANK('Data Entry'!$${letter}$${r + 1}), "", 'Data Entry'!$${letter}$${r + 1})`;
+
             const cell = sheet3.getCell(r + 1, i + 1);
             cell.value = {
               formula: formula,
@@ -193,8 +195,7 @@ function generateDataEntry(path, outputFilePath) {
         }
 
     }
-  });
-
+  });  
   
   let skipped = 0;
 
@@ -252,10 +253,159 @@ function generateDataEntry(path, outputFilePath) {
       } catch (error) {
         throw new WorkbookError('.. Error in formatting cardinality column (header and rows) ...');
       }
-    }
-    
-  });
+    } else if (overlay.type && overlay.type.includes('/conformance/')) {
+      try {
+
+        sheet1.getColumn(i + 4 - skipped).width = 15;
+        sheet1.getCell(1, i + 4 - skipped).value = 'OL: Conformance';
+        formatHeader2(sheet1.getCell(1, i + 4 - skipped));
+
+        for (let row = 2; row <= attributeNames.length + 1; row++) {
+          sheet1.getCell(row, i + 4 - skipped).value = null;
+          formatAttr2(sheet1.getCell(row, i + 4 - skipped));
+        }
+
+        for (let [attrName, conformance] of Object.entries(overlay.attribute_conformance)) {
+
+          const attrKeys = Object.keys(attributesIndex);
+          const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
+          const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+          if (rowIndex) {
+            sheet1.getCell(rowIndex, i + 4 - skipped).value = conformance;
+          } 
+        }
+
+      } catch (error) {
+        throw new WorkbookError('.. Error in formatting conformance column (header and rows) ...');
+      }
+    } else if (overlay.type && overlay.type.includes('/conditional/')) {
+      try {
+
+        sheet1.getColumn(i + 4 - skipped).width = 15;
+        sheet1.getCell(1, i + 4 - skipped).value = 'OL: Conditional [Condition]';
+        formatHeader2(sheet1.getCell(1, i + 4 - skipped));
+
+        sheet1.getColumn(i + 5 - skipped).width = 15;
+        sheet1.getCell(1, i + 5 - skipped).value = 'OL: Conditional [Dependecies]';
+        formatHeader2(sheet1.getCell(1, i + 5 - skipped));
+        
+        for (let row = 2; row <= attributeNames.length + 1; row++) {
+          sheet1.getCell(row, i + 4 - skipped).value = null;
+          sheet1.getCell(row, i + 5 - skipped).value = null;
+          formatAttr2(sheet1.getCell(row, i + 4 - skipped));
+          formatAttr2(sheet1.getCell(row, i + 5 - skipped));
+        }
+
+        for (let [attrName, condition] of Object.entries(overlay.attribute_conditions)) {
+
+          const attrKeys = Object.keys(attributesIndex);
+          const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
+          const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+          if (rowIndex) {
+            sheet1.getCell(rowIndex, i + 4 - skipped).value = condition;
+          } 
+        }
+
+        for (let [attrName, dependencies] of Object.entries(overlay.attribute_dependencies)) {
+
+          const attrKeys = Object.keys(attributesIndex);
+          const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
+          const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+          if (rowIndex) {
+            sheet1.getCell(rowIndex, i + 5 - skipped).value = dependencies.join(",");
+          } 
+        }
+
+        skipped -= 1;
+
+      }
+      catch (error) {
+        throw new WorkbookError('.. Error in formatting conditional column (header and rows) ...');
+      }
+    } else if (overlay.type && overlay.type.includes('/format/')) {
+      try {
+
+        sheet1.getColumn(i + 4 - skipped).width = 15;
+        sheet1.getCell(1, i + 4 - skipped).value = 'OL: Format';
+        formatHeader2(sheet1.getCell(1, i + 4 - skipped));
+
+        for (let row = 2; row <= attributeNames.length + 1; row++) {
+          sheet1.getCell(row, i + 4 - skipped).value = null;
+          formatAttr2(sheet1.getCell(row, i + 4 - skipped));
+        }
+
+        for (let [attrName, format] of Object.entries(overlay.attribute_formats)) {
+
+          const attrKeys = Object.keys(attributesIndex);
+          const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
+          const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+          if (rowIndex) {
+            sheet1.getCell(rowIndex, i + 4 - skipped).value = format;
+          }
+
+          const attrTypeFromAttrKeys = attrKeys.map(key => key.split(','));
+          const attrTypeObjects = attrTypeFromAttrKeys.map(([attr, type]) => ({ attr, type }));;
+
+          for (let attrTypeObject of attrTypeObjects) {
+
+            if (attrTypeObject.attr === attrName && attrTypeObject.type === "DateTime") {
+             
+              const format_attr = { numFmt: 'yyyy-mm-dd' };
+              const col_i = attributesIndex[[attrName, attrTypeObject.type]] - 1;
+              const letter = String.fromCharCode(65 + col_i -1);
+
+              for (let r=1; r <= 1000; r++) {
+                sheet2.getCell(r+1, col_i).value = null;
+                sheet2.getCell(r+1, col_i).numFmt = format_attr.numFmt;
+                const formula = `IF(ISBLANK('Data Entry'!$${letter}$${r+1}), "", 'Data Entry'!$${letter}$${r+1})`;
+                const cell = sheet3.getCell(r+1 , col_i);
+                cell.value = {
+                  formula: formula,
+                };
+              }
+            }
+          }
+        
+        }
+
+      } catch (error) {
+        throw new WorkbookError('.. Error in formatting format column (header and rows) ...');
+      }
+    } else if (overlay.type && overlay.type.includes('/entry_code/')) {
+
+      try {
+        sheet1.getColumn(i + 4 - skipped).width = 15;
+        sheet1.getCell(1, i + 4 - skipped).value = 'OL: Entry Code';
+        formatHeader2(sheet1.getCell(1, i + 4 - skipped));
+
+        for (let row = 2; row <= attributeNames.length + 1; row++) {
+          sheet1.getCell(row, i + 4 - skipped).value = null;
+          formatAttr2(sheet1.getCell(row, i + 4 - skipped));
+        }
+
+
+        for (let [attrName, entryCode] of Object.entries(overlay.attribute_entry_codes)) {
+
+          if (Array.isArray(entryCode)) {
+            const joinedCodes = entryCode.join('|');
+            const attrKeys = Object.keys(attributesIndex);
+            const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
+            const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+            if (rowIndex) {
+              sheet1.getCell(rowIndex, i + 4 - skipped).value = joinedCodes
+              // formatAttr2(sheet2.getCell(rowIndex, i + 4 - skipped))
+            }
+          }
   
+        }
+
+      } catch (error) {
+        throw new WorkbookError('.. Error in formatting entry code column (header and rows) ...');
+      }
+
+    } 
+
+  }); 
   return workbook;
 
 }
@@ -263,7 +413,8 @@ function generateDataEntry(path, outputFilePath) {
 // path to the OCA bundle for examples
 const directory = process.env.path;
 const filename = 'a5cbe768bee30be3638f434cd46d22eb.zip';
-// const filename = '62434bb0350d9c5b7b8f6b4d52bfed8f.zip';
+// const filename = 'OCA_test.zip';
+// const filename = '572eb71004e56e27e934b71a1cf400bc.zip';
 const path = `${directory}/${filename}`;
 const outputFilePath = `${filename.split('.')[0]}_data_entry.xlsx`;
 
