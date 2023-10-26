@@ -4,7 +4,8 @@ const AdmZip = require('adm-zip');
 const ExcelJS = require('exceljs');
 const { json } = require('stream/consumers');
 const { start } = require('repl');
-const { Console } = require('console');
+const { format } = require('path');
+const { off } = require('process');
 require('dotenv').config();
 
 // Custom error-handling function
@@ -198,6 +199,8 @@ function generateDataEntry(path, outputFilePath) {
   });  
   
   let skipped = 0;
+  let lang = [];;
+  const lookupEntries = {}
 
   jsonData.forEach((overlay, i) => {
     if (overlay.type && overlay.type.includes('/character_encoding/')) {
@@ -339,6 +342,7 @@ function generateDataEntry(path, outputFilePath) {
           const attrKeys = Object.keys(attributesIndex);
           const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
           const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+  
           if (rowIndex) {
             sheet1.getCell(rowIndex, i + 4 - skipped).value = format;
           }
@@ -357,11 +361,8 @@ function generateDataEntry(path, outputFilePath) {
               for (let r=1; r <= 1000; r++) {
                 sheet2.getCell(r+1, col_i).value = null;
                 sheet2.getCell(r+1, col_i).numFmt = format_attr.numFmt;
-                const formula = `IF(ISBLANK('Data Entry'!$${letter}$${r+1}), "", 'Data Entry'!$${letter}$${r+1})`;
-                const cell = sheet3.getCell(r+1 , col_i);
-                cell.value = {
-                  formula: formula,
-                };
+                sheet3.getCell(r+1, col_i).numFmt = format_attr.numFmt;
+  
               }
             }
           }
@@ -392,8 +393,7 @@ function generateDataEntry(path, outputFilePath) {
             const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
             const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
             if (rowIndex) {
-              sheet1.getCell(rowIndex, i + 4 - skipped).value = joinedCodes
-              // formatAttr2(sheet2.getCell(rowIndex, i + 4 - skipped))
+              sheet1.getCell(rowIndex, i + 4 - skipped).value = joinedCodes;
             }
           }
   
@@ -403,11 +403,217 @@ function generateDataEntry(path, outputFilePath) {
         throw new WorkbookError('.. Error in formatting entry code column (header and rows) ...');
       }
 
-    } 
+    } else if (overlay.type && overlay.type.includes('/label/')) {
+      lang.push(overlay);
+      let attr_labels = null;
 
-  }); 
+      const o = lang.find(overlay => overlay.language === 'en');
+
+      if (o) {
+        attr_labels = o.attribute_labels;
+      } else {
+        attr_labels = lang[0].attribute_labels;
+      }
+
+      if (o) {
+        try {
+          sheet1.getColumn(i + 4 - skipped).width = 17;
+          sheet1.getCell(1, i + 4 - skipped).value = 'OL: Label';
+          formatHeader2(sheet1.getCell(1, i + 4 - skipped));
+
+          for (let row = 2; row <= attributeNames.length + 1; row++) {
+            sheet1.getCell(row, i + 4 - skipped).value = null;
+            formatAttr2(sheet1.getCell(row, i + 4 - skipped));
+          }
+          
+          for (let [attrName, label] of Object.entries(attr_labels)) {
+
+            const attrKeys = Object.keys(attributesIndex);
+            const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
+            const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+            if (rowIndex) {
+              sheet1.getCell(rowIndex, i + 4 - skipped).value = label;
+            } 
+
+            const labelValue = Object.values(attr_labels);
+            sheet2.getRow(1).values = labelValue;
+
+            labelValue.forEach((label, index) => {
+              const cell = sheet2.getCell(1, index + 1);
+              formatDataHeader(cell);
+            });          
+          }
+        } catch (error) {
+          throw new WorkbookError('.. Error in formatting labels code column (header and rows) ...');
+        }
+        lang.length = 0;
+      } else {
+        skipped += 1;
+      }
+    } else if (overlay.type && overlay.type.includes('/entry/')) {
+      lang.push(overlay);
+      let attr_labels = null;
+
+      const o = lang.find(overlay => overlay.language === 'en');
+
+
+      if (o) {
+        attr_labels = o.attribute_entries;
+      } else {
+        attr_labels = lang[0].attribute_entries;
+      }
+
+      if (o) {
+        try{
+          sheet1.getColumn(i + 4 - skipped).width = 20;
+          sheet1.getCell(1, i + 4 - skipped).value = 'OL: Entry';
+          formatHeader2(sheet1.getCell(1, i + 4 - skipped));
+
+          for (let row = 2; row <= attributeNames.length + 1; row++) {
+            sheet1.getCell(row, i + 4 - skipped).value = null;
+            formatAttr2(sheet1.getCell(row, i + 4 - skipped));
+          }
+
+          for (let [attrName, entries] of Object.entries(attr_labels)) {
+
+            if (entries !== undefined && entries !== null && entries instanceof Object) {
+              lookupEntries[attrName] = entries;
+              const attrKeys = Object.keys(attributesIndex);
+              const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0])
+              const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+
+              const formattedEntries = [];
+
+              for (const [key, value] of Object.entries(entries)) {
+                formattedEntries.push(`${key}:${value}`);
+              }
+
+              const formattedEntryString = formattedEntries.join('|');
+              if (rowIndex) {
+                sheet1.getCell(rowIndex, i + 4 - skipped).value = formattedEntryString;
+              }
+            }
+          }
+
+        } catch (error) {
+          throw new WorkbookError('.. Error in formatting entry column (header and rows) ...', error.message);
+          // console.error('Error in formatting entry column (header and rows):', error.message);
+
+        }
+        lang.length = 0;
+      } else {
+        skipped += 1;
+      }
+    } else if (overlay.type && overlay.type.includes('/information/')) {
+      
+      lang.push(overlay);
+      let attr_labels = null;
+
+      const o = lang.find(overlay => overlay.language === 'en');
+
+      if (o) {
+        attr_labels = o.attribute_information;
+      } else {
+        attr_labels = lang[0].attribute_information;
+      }
+
+      if (o) {
+        try {
+          sheet1.getColumn(i + 4 - skipped).width = 20;
+          sheet1.getCell(1, i + 4 - skipped).value = 'OL: Information';
+          formatHeader2(sheet1.getCell(1, i + 4 - skipped));
+
+          for (let row = 2; row <= attributeNames.length + 1; row++) {
+            sheet1.getCell(row, i + 4 - skipped).value = null;
+            formatAttr2(sheet1.getCell(row, i + 4 - skipped));
+          }
+
+          for (let [attrName, info] of Object.entries(attr_labels)) {
+            const attrKeys = Object.keys(attributesIndex);
+            const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
+            const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
+            if (rowIndex) {
+              sheet1.getCell(rowIndex, i + 4 - skipped).value = info;
+            } 
+          }
+
+        } catch (error) {
+          throw new WorkbookError('.. Error in formatting information column (header and rows) ...');
+        }
+        lang.length = 0;
+      } else {
+        skipped += 1;
+      }
+    }
+  });
+
+  // lookup table
+  const lookUpTable = new Map();
+  let lookUpStart = attributeNames.length + 6;
+
+  sheet1.getCell(lookUpStart, 1).value = 'Lookup tables';
+  formatLookupHeader(sheet1.getCell(lookUpStart, 1));
+
+  sheet1.getCell(lookUpStart, 2).value = null;
+  formatLookupHeader(sheet1.getCell(lookUpStart, 2));
+
+  let offset = 0; // used to offset the lookup table rows
+
+  for (const [attrName, entries] of Object.entries(lookupEntries)) {
+
+    sheet1.getCell(lookUpStart + offset + 1, 1).value = attrName;
+    formatLookupAttr(sheet1.getCell(lookUpStart + offset + 1, 1));
+
+    lookUpTable.set(attrName, {
+      start : lookUpStart + 3 + offset,
+      end: lookUpStart + 2 + offset + Object.entries.length,
+    });
+
+    offset += Object.entries.length + 2;
+  }
+
+  console.log(lookUpTable);
+
+
+  // let offset = 0;
+  // for ([attrName, entries] of Object.entries(lookupEntries)) {
+  
+  //   // sheet1.getCell(lookUpStart + offset + 1, 1).value = attrName;
+  //   // formatLookupAttr(sheet1.getCell(lookUpStart + offset + 1, 1));
+
+  //   sheet1.getCell(lookUpStart, 0).value = attrName;
+  //   formatLookupAttr(sheet1.getCell(lookUpStart, 0));
+
+  //   lookUpTable.set(attrName, {
+  //     start: lookUpStart + 2 + offset,
+  //     end: lookUpStart + 1 + offset + entries.size,
+  //   });
+
+  //   let i = 0;
+  //   for (const [k, v] of entriesMap.entries()) {
+  //     sheet1.getCell(lookUpStart + 2 + offset + i, 0).value = v;
+  //     sheet1.getCell(lookUpStart + 2 + offset + i, 1).value = k;
+  //     i++;
+  //   }
+  //   offset += entriesMap.size + 2;
+
+  //   // lookUpStart++;
+  // }
+
+  // // for ([attrName, entries] of Object.entries(lookupEntries)) {
+
+  // //   const values = []
+  // //   lookUpStart + 3 + offset,
+  // //   lookUpStart + 2 + offset + Object.keys(entries).length
+
+  // //   lookUpTable[attrName] = values;
+  // // }
+  
+
+
+
+
   return workbook;
-
 }
 
 // path to the OCA bundle for examples
@@ -415,6 +621,7 @@ const directory = process.env.path;
 const filename = 'a5cbe768bee30be3638f434cd46d22eb.zip';
 // const filename = 'OCA_test.zip';
 // const filename = '572eb71004e56e27e934b71a1cf400bc.zip';
+// const filename = '9f103493cbe64733919f00d3768e6ba5.zip';
 const path = `${directory}/${filename}`;
 const outputFilePath = `${filename.split('.')[0]}_data_entry.xlsx`;
 
