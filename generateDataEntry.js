@@ -1,11 +1,6 @@
 
-const fs = require('fs');
 const AdmZip = require('adm-zip');
 const ExcelJS = require('exceljs');
-const { json } = require('stream/consumers');
-const { start } = require('repl');
-const { format } = require('path');
-const { off } = require('process');
 require('dotenv').config();
 
 // Custom error-handling function
@@ -179,7 +174,6 @@ function generateDataEntry(path, outputFilePath) {
             };
           }
         }
-
         } catch (error) {
           throw new WorkbookError('.. Error in creating the formulae sheet3 data ...');
         }
@@ -194,7 +188,6 @@ function generateDataEntry(path, outputFilePath) {
         for (let i = 0; i < numColumns; i++) {
           sheet3.getColumn(i + 1).width = columnWidth;
         }
-
     }
   });  
   
@@ -456,7 +449,6 @@ function generateDataEntry(path, outputFilePath) {
 
       const o = lang.find(overlay => overlay.language === 'en');
 
-
       if (o) {
         attr_labels = o.attribute_entries;
       } else {
@@ -557,75 +549,90 @@ function generateDataEntry(path, outputFilePath) {
   sheet1.getCell(lookUpStart, 2).value = null;
   formatLookupHeader(sheet1.getCell(lookUpStart, 2));
 
-  let offset = 0; // used to offset the lookup table rows
+  let offset = 0;
 
   for (const [attrName, entries] of Object.entries(lookupEntries)) {
 
-    sheet1.getCell(lookUpStart + offset + 1, 1).value = attrName;
-    formatLookupAttr(sheet1.getCell(lookUpStart + offset + 1, 1));
+    sheet1.getCell(lookUpStart + 1 + offset, 1).value = attrName;
+    formatLookupAttr(sheet1.getCell(lookUpStart + 1 + offset, 1));
 
-    lookUpTable.set(attrName, {
-      start : lookUpStart + 3 + offset,
-      end: lookUpStart + 2 + offset + Object.entries.length,
-    });
+    const startRow = lookUpStart + 2 + offset;
+    const endRow = lookUpStart + 1 + offset + Object.keys(entries).length;
 
-    offset += Object.entries.length + 2;
+    lookUpTable.set(attrName, [startRow, endRow]);
+
+    offset += Object.keys(entries).length + 2;
   }
 
-  console.log(lookUpTable);
-
-
-  // let offset = 0;
-  // for ([attrName, entries] of Object.entries(lookupEntries)) {
+  for (const [attrName, entries] of Object.entries(lookupEntries)) {
+      
+      const values = []
+      const keys =[]
+      for (const [k, v] of Object.entries(entries)) {
+        values.push(v);
+        keys.push(k);
+      }
   
-  //   // sheet1.getCell(lookUpStart + offset + 1, 1).value = attrName;
-  //   // formatLookupAttr(sheet1.getCell(lookUpStart + offset + 1, 1));
-
-  //   sheet1.getCell(lookUpStart, 0).value = attrName;
-  //   formatLookupAttr(sheet1.getCell(lookUpStart, 0));
-
-  //   lookUpTable.set(attrName, {
-  //     start: lookUpStart + 2 + offset,
-  //     end: lookUpStart + 1 + offset + entries.size,
-  //   });
-
-  //   let i = 0;
-  //   for (const [k, v] of entriesMap.entries()) {
-  //     sheet1.getCell(lookUpStart + 2 + offset + i, 0).value = v;
-  //     sheet1.getCell(lookUpStart + 2 + offset + i, 1).value = k;
-  //     i++;
-  //   }
-  //   offset += entriesMap.size + 2;
-
-  //   // lookUpStart++;
-  // }
-
-  // // for ([attrName, entries] of Object.entries(lookupEntries)) {
-
-  // //   const values = []
-  // //   lookUpStart + 3 + offset,
-  // //   lookUpStart + 2 + offset + Object.keys(entries).length
-
-  // //   lookUpTable[attrName] = values;
-  // // }
+      const startRow = lookUpTable.get(attrName)[0];
+      const endRow = lookUpTable.get(attrName)[1];
   
+      for (let i = startRow; i <= endRow; i++) {
+        sheet1.getCell(i, 1).value = values[i - startRow];
+        formatLookupValue(sheet1.getCell(i, 1));
+        sheet1.getCell(i, 2).value = keys[i - startRow];
+        formatLookupValue(sheet1.getCell(i, 2));
+      }
+  }
+  // transform lookupEntries to fit the data validation rule
+  const transformedEntries = {};
 
+  for (const [key, values] of Object.entries(lookupEntries)) {
+    const keys = Object.keys(values);
+    const valueList = Object.values(values);
 
+    transformedEntries[key] = [keys, valueList];
+  }
 
+  for (const [attrName, [start, end]] of lookUpTable) {
+
+    listEntries = null;
+
+    for (const [key, [keys, valueList]] of Object.entries(transformedEntries)) {
+      if (key === attrName) {
+        listEntries = ['"' + valueList.join(',') + '"'];
+      }
+    }
+
+    const validationRule = {
+      type: 'list',
+      showDropDown: true,
+      // formula1: `='Schema Description'!$A$${start}:$A$${end}`,
+      formulae: listEntries,
+      showErrorMessage: true,
+    };
+
+    for (let row = 2; row <= 1000; row++) {
+      const attrKeys = Object.keys(attributesIndex);
+      const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
+      const col_i = attrNameFromAttrKeys.indexOf(attrName) + 1;
+      const letter = String.fromCharCode(65 + col_i-1);
+      sheet2.getCell(row, col_i).dataValidation = validationRule;
+      const formula = `IF(ISBLANK('Data Entry'!\$${letter}\$${row}), "", VLOOKUP('Data Entry'!\$${letter}\$${row}, 'Schema Description'!\$A\$${start}:\$B\$${end}, 2))`;
+      sheet3.getCell(row, col_i).value = {
+        formula: formula,
+      };
+    }
+  }
 
   return workbook;
 }
 
-// path to the OCA bundle for examples
-const directory = process.env.path;
+// Example: 
+/* const directory = process.env.path;
 const filename = 'a5cbe768bee30be3638f434cd46d22eb.zip';
-// const filename = 'OCA_test.zip';
-// const filename = '572eb71004e56e27e934b71a1cf400bc.zip';
-// const filename = '9f103493cbe64733919f00d3768e6ba5.zip';
 const path = `${directory}/${filename}`;
-const outputFilePath = `${filename.split('.')[0]}_data_entry.xlsx`;
+const outputFilePath = `examples/${filename.split('.')[0]}_data_entry.xlsx`;
 
-// Generate the workbook and handle errors
 async function generateAndSaveDateEntry() {
   try {
     const generatedWorkbook = generateDataEntry(path, outputFilePath);
@@ -640,6 +647,6 @@ async function generateAndSaveDateEntry() {
     }
   }
 }
-// Generate and save the workbook
-generateAndSaveDateEntry(path, outputFilePath);
 
+generateAndSaveDateEntry(path, outputFilePath);
+*/
