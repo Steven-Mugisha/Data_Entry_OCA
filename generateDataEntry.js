@@ -138,7 +138,7 @@ function generateDataEntry(path, outputFilePath) {
 
         if (attrIndex !== undefined) {
           sheet1.getCell(attrIndex, 3).value = attrType;
-          formatAttr2(sheet1.getCell(attrIndex, 3)); 
+          formatAttr1(sheet1.getCell(attrIndex, 3)); 
         } else {
           throw new WorkbookError('.. Error check the attribute type ...');
         }
@@ -165,10 +165,10 @@ function generateDataEntry(path, outputFilePath) {
         for (let i = 0; i < attributeNames.length; i++) {
           const letter = String.fromCharCode(65 + i);
           
-          for (let r = 1; r <= 1000; r++) {
-            const formula = `IF(ISBLANK('Data Entry'!$${letter}$${r + 1}), "", 'Data Entry'!$${letter}$${r + 1})`;
+          for (let row = 1; row <= 1000; row++) {
+            const formula = `IF(ISBLANK('Data Entry'!$${letter}$${row + 1}), "", 'Data Entry'!$${letter}$${row + 1})`;
 
-            const cell = sheet3.getCell(r + 1, i + 1);
+            const cell = sheet3.getCell(row + 1, i + 1);
             cell.value = {
               formula: formula,
             };
@@ -340,13 +340,15 @@ function generateDataEntry(path, outputFilePath) {
             sheet1.getCell(rowIndex, i + 4 - skipped).value = format;
           }
 
+          console.log(attrKeys)
+
           const attrTypeFromAttrKeys = attrKeys.map(key => key.split(','));
-          const attrTypeObjects = attrTypeFromAttrKeys.map(([attr, type]) => ({ attr, type }));;
+          const attrTypeObjects = attrTypeFromAttrKeys.map(([attr, type]) => ({ attr, type }));
 
           for (let attrTypeObject of attrTypeObjects) {
 
             if (attrTypeObject.attr === attrName && attrTypeObject.type === "DateTime") {
-             
+              
               const format_attr = { numFmt: 'yyyy-mm-dd' };
               const col_i = attributesIndex[[attrName, attrTypeObject.type]] - 1;
               const letter = String.fromCharCode(65 + col_i -1);
@@ -629,7 +631,7 @@ function generateDataEntry(path, outputFilePath) {
 
 // Example: 
 /* const directory = process.env.path;
-const filename = 'a5cbe768bee30be3638f434cd46d22eb.zip';
+const filename = '5c8ddbcf419165bb44b9f57a631774b6.zip';
 const path = `${directory}/${filename}`;
 const outputFilePath = `examples/${filename.split('.')[0]}_data_entry.xlsx`;
 
@@ -649,4 +651,4 @@ async function generateAndSaveDateEntry() {
 }
 
 generateAndSaveDateEntry(path, outputFilePath);
-*/
+  */
