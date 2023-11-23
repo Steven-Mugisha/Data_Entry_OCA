@@ -44,7 +44,10 @@ function generateDataEntry(path) {
     const informationOverlays = [];
     const unitOverlays = [];
     const conformanceOverlays = [];
+    const entryOverlays = [];
+    const entryCodeOverlays = [];
     const otherOverlays = [];
+
 
     for (let i = 0; i < originJsonData.length; i++) {
         const overlay = originJsonData[i];
@@ -52,15 +55,35 @@ function generateDataEntry(path) {
         if (overlay.type && overlay.type.includes('/capture_base/')) {
             captureBaseOverlays.push(overlay);
         } else if (overlay.type && overlay.type.includes('/label/')) {
-            labelOverlays.push(overlay);
+            if (overlay.language === selectedLang) {
+                labelOverlays.push(overlay);
+            } else {
+                continue;
+            };
         } else if (overlay.type && overlay.type.includes('/information/')) {
-            informationOverlays.push(overlay);
+            if (overlay.language === selectedLang) {
+                informationOverlays.push(overlay);
+            } else {
+                continue;
+            };
         } else if (overlay.type && overlay.type.includes('/unit/')) {
-            unitOverlays.push(overlay);
+            if (overlay.measurement_system === 'Metric') {
+                unitOverlays.push(overlay);
+            } else {
+                continue;
+            };
         } else if (overlay.type && overlay.type.includes('/conformance/')) {
             conformanceOverlays.push(overlay);
+        } else if (overlay.type && overlay.type.includes('/entry/')) {
+            if (overlay.language === selectedLang) {
+                entryOverlays.push(overlay);
+            };
+        } else if (overlay.type && overlay.type.includes('/entry_code/')) {
+            entryCodeOverlays.push(overlay);
         } else {
-            otherOverlays.push(overlay);
+            if (overlay.type && !overlay.type.includes('/meta/')) {
+                otherOverlays.push(overlay);
+            };
         };
     };
 
@@ -70,6 +93,8 @@ function generateDataEntry(path) {
         ...informationOverlays,
         ...unitOverlays,
         ...conformanceOverlays,
+        ...entryOverlays,
+        ...entryCodeOverlays,
         ...otherOverlays
     ];
 
@@ -86,7 +111,7 @@ function generateDataEntry(path) {
         cell.style = {
             font: {
             bold: true,
-            color: { argb: '1395CE' },
+            color: { argb: '0000EE' },
             underline: true
             }
         };
@@ -145,35 +170,17 @@ function generateDataEntry(path) {
             schemaLanguage = null, schemaClassification = null,
                 schemaSAID = null;
 
-    const lang_meta = [];;
+    try {
+        metaOverlay = originJsonData.find(o => o.type && o.type.includes('/meta/') && o.language === selectedLang);
+        schemaName = metaOverlay.name;
+        schemaDescription = metaOverlay.description;
+        schemaLanguage = metaOverlay.language;
+        schemaClassification = jsonData.find(o => o.type && o.type.includes('/capture_base/')).classification;
+        schemaSAID = json.d
 
-    if (jsonData.some(o => o.type && o.type.includes('/meta/'))) {
-        jsonData.forEach(o => {
-            if (o.type && o.type.includes('/meta/')) {
-                lang_meta.push(o);
-            }
-        });
-
-        if (lang_meta.length > 0) {
-            const o = lang_meta.find(overlay => overlay.language === 'eng');
-
-            if (o) {
-                schemaDescription = o.description;
-                schemaLanguage = o.language;
-                schemaName = o.name;
-            } else {
-                schemaDescription = lang_meta[0].description;
-                schemaLanguage = lang_meta[0].language;
-                schemaName = lang_meta[0].name;
-            };
-        };
-
-    } else {
-        throw new WorkbookError('.. Error in reading the meta data ...');
+    } catch (error) {
+        throw new WorkbookError('.. Error in reading the meta overlay ...');
     };
-
-    schemaClassification = jsonData.find(o => o.type && o.type.includes('/capture_base/')).classification;
-    schemaSAID = json.d
 
     // Step 5: first page edits
     sheet1.getRow(2).values = ['This is an Excel workbook for data entry.'];
@@ -203,7 +210,7 @@ function generateDataEntry(path) {
         hyperlink: "https://doi.org/10.5281/zenodo.7707367",
     };
 
-    sheet1.mergeCells('B19:M19');
+    sheet1.mergeCells('B19:N19');
     formatHyperlink(ocaREf_cell);
 
     const semantic_cell = sheet1.getCell(20, 2);
@@ -236,6 +243,35 @@ function generateDataEntry(path) {
     };
 
     const sheet2 = workbook.addWorksheet('Data Entry');
+    try {
+        const labelOverlay = jsonData.find(o => o.type && o.type.includes('/label/'));
+        if (labelOverlay) {
+            attrLength = Object.keys(jsonData.find(o => o.type && o.type.includes('/capture_base/')).attributes).length;
+            labelsLength = Object.keys(jsonData.find(o => o.type && o.type.includes('/label/')).attribute_labels).length;
+
+            if (labelsLength != attrLength) {
+                const attrKeys = Object.keys(jsonData.find(o => o.type && o.type.includes('/capture_base/')).attributes);
+                sheet2.getRow(1).values = attrKeys;
+
+                // format using the formatDataHeader function
+                attrKeys.forEach((_attrName, index) => {
+                    const cell = sheet2.getCell(1, index + 1);
+                    formatDataHeader(cell);
+                });
+            };
+        } else {
+            sheet2.getRow(1).values = Object.keys(jsonData.find(o => o.type && o.type.includes('/capture_base/')).attributes);
+            Object.keys(jsonData.find(o => o.type && o.type.includes('/capture_base/')).attributes).forEach((_attrName, index) => {
+                const cell = sheet2.getCell(1, index + 1);
+                formatDataHeader(cell);
+            });
+        };
+    } catch (error) {
+        throw new WorkbookError('.. Error assigning head names to sheet2 (Data Entry) ...');
+    };
+
+
+
     const sheet3 = workbook.addWorksheet('Schema conformant data');
 
     const attributesIndex = {};
@@ -311,8 +347,6 @@ function generateDataEntry(path) {
     });
 
     let skipped = 0;
-    let lang = [];
-    let metricSystem = [];
     const lookupEntries = {};
 
     jsonData.forEach((overlay, i) => {
@@ -503,16 +537,7 @@ function generateDataEntry(path) {
                 throw new WorkbookError('.. Error in formatting entry code column (header and rows) ...');
             };
         } else if (overlay.type && overlay.type.includes('/label/')) {
-            lang.push(overlay);
-            let attr_labels = null;
-
-            const o = lang.find(overlay => overlay.language === 'eng');
-
-            if (o != undefined && o != null) {
-                attr_labels = o.attribute_labels;
-            } else {
-                attr_labels = lang[0].attribute_labels;
-            };
+            const attr_labels = overlay.attribute_labels;
 
             if (attr_labels) {
                 try {
@@ -546,25 +571,14 @@ function generateDataEntry(path) {
                     throw new WorkbookError('.. Error in formatting labels code column (header and rows) ...');
                 };
 
-            lang.length = 0;
-
             } else {
 
                 skipped += 1;
             };
         } else if (overlay.type && overlay.type.includes('/entry/')) {
-            lang.push(overlay);
-            let attr_labels = null;
+            const attr_entries = overlay.attribute_entries;
 
-            const o = lang.find(overlay => overlay.language === 'eng');
-
-            if (o != undefined && o != null) {
-                attr_labels = o.attribute_entries;
-            } else {
-                attr_labels = lang[0].attribute_entries;
-            };
-
-            if (attr_labels) {
+            if (attr_entries) {
                 try {
                     sheet1.getColumn(i + 3 - skipped).width = 20;
                     sheet1.getCell(shift + 1, i + 3 - skipped).value = 'Entry';
@@ -575,7 +589,7 @@ function generateDataEntry(path) {
                         formatAttr(sheet1.getCell(shift + row, i + 3 - skipped));
                     };
 
-                    for (let [attrName, entries] of Object.entries(attr_labels)) {
+                    for (let [attrName, entries] of Object.entries(attr_entries)) {
 
                         if (entries !== undefined && entries !== null && entries instanceof Object) {
                             lookupEntries[attrName] = entries;
@@ -601,26 +615,14 @@ function generateDataEntry(path) {
                     // console.error('Error in formatting entry column (header and rows):', error.message);
                 };
 
-            lang.length = 0;
-
             } else {
 
                 skipped += 1;
             };
         } else if (overlay.type && overlay.type.includes('/information/')) {
+            const attr_info = overlay.attribute_information;
 
-            lang.push(overlay);
-            let attr_labels = null;
-
-            const o = lang.find(overlay => overlay.language === 'eng');
-
-            if (o != undefined && o != null) {
-                attr_labels = o.attribute_information;
-            } else {
-                attr_labels = lang[0].attribute_information;
-            }
-
-            if (attr_labels) {
+            if (attr_info) {
                 try {
                     sheet1.getColumn(i + 3 - skipped).width = 20;
                     sheet1.getCell(shift + 1, i + 3 - skipped).value = 'Information';
@@ -631,38 +633,26 @@ function generateDataEntry(path) {
                         formatAttr(sheet1.getCell(shift + row, i + 3 - skipped));
                     };
 
-                    for (let [attrName, info] of Object.entries(attr_labels)) {
+                    for (let [attrName, info] of Object.entries(attr_info)) {
                         const attrKeys = Object.keys(attributesIndex);
                         const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
                         const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
                         if (rowIndex) {
                             sheet1.getCell(shift + rowIndex, i + 3 - skipped).value = info;
-                        }
-                    }
+                        };
+                    };
 
                 } catch (error) {
                     throw new WorkbookError('.. Error in formatting information column (header and rows) ...');
-                }
-            lang.length = 0;
-
+                };
             } else {
 
                 skipped += 1;
             };
         } else if (overlay.type && overlay.type.includes('/unit/')) {
-            metricSystem.push(overlay);
+            const attr_units = overlay.attribute_units;
 
-            let attr_labels = null;
-
-            const o = metricSystem.find(overlay => overlay.measurement_system === 'Metric');
-
-            if (o != undefined && o != null) {
-                attr_labels = o.attribute_units;
-            } else {
-                attr_labels = metricSystem[0].attribute_units;
-            }
-
-            if (attr_labels) {
+            if (attr_units) {
                 try {
                     sheet1.getColumn(i + 3 - skipped).width = 20;
                     sheet1.getCell(shift + 1, i + 3 - skipped).value = 'Unit';
@@ -673,7 +663,7 @@ function generateDataEntry(path) {
                         formatAttr(sheet1.getCell(shift + row, i + 3 - skipped));
                     };
 
-                    for (let [attrName, unit] of Object.entries(attr_labels)) {
+                    for (let [attrName, unit] of Object.entries(attr_units)) {
                         const attrKeys = Object.keys(attributesIndex);
                         const attrNameFromAttrKeys = attrKeys.map(key => key.split(',')[0]);
                         const rowIndex = attrNameFromAttrKeys.indexOf(attrName) + 2;
@@ -773,9 +763,9 @@ function generateDataEntry(path) {
     return workbook;
 };
 
-// Example:
+// [test]:
 const directory = process.env.path;
-const filename = 'chicken_example.json';
+const filename = 'passport.json';
 const path = `${directory}/${filename}`;
 const outputFilePath = `examples/schema_json_examples/${filename.split('.')[0]}_data_entry.xlsx`;
 
